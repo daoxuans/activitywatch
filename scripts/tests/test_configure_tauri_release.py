@@ -250,6 +250,7 @@ def test_endpoint_drift_fails_closed(config):
 )
 def test_workflow_requires_keys_only_for_publishable_research_builds(
     config,
+    bash_executable,
     event,
     ref,
     research,
@@ -262,9 +263,8 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
     script = textwrap.dedent(
         step.split("        run: |\n")[1].split("        env:\n")[0]
     )
-    # A nested Bash launched by Python on Windows can find the WindowsApps
-    # `python` alias even though the outer CI shell runs pytest from its venv.
-    # Pin only the interpreter; keep the release script's branching unchanged.
+    # Pin only the interpreter in the nested shell. The release script's
+    # branching remains unchanged, independent of Windows PATH aliases.
     script = 'python() { "$AW_TEST_PYTHON" "$@"; }\n' + script
     work = config.parent / "build"
     shutil.copytree(ROOT / "scripts/package", work / "scripts/package")
@@ -282,7 +282,11 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
         TAURI_SIGNING_PRIVATE_KEY="",
     )
     result = subprocess.run(
-        ["bash", "-e", "-c", script], cwd=work, env=env, text=True, capture_output=True
+        [bash_executable, "-e", "-c", script],
+        cwd=work,
+        env=env,
+        text=True,
+        capture_output=True,
     )
     diagnostics = (
         f"exit={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"

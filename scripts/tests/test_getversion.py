@@ -9,7 +9,7 @@ ROOT = Path(__file__).parents[2]
 GETVERSION = ROOT / "scripts/package/getversion.sh"
 
 
-def test_explicit_fork_build_version_precedes_git_tag_environment():
+def test_explicit_fork_build_version_precedes_git_tag_environment(bash_executable):
     env = dict(
         os.environ,
         AW_BUILD_VERSION="v0.14.0.dev-deadbeef",
@@ -17,11 +17,11 @@ def test_explicit_fork_build_version_precedes_git_tag_environment():
         GITHUB_REF_NAME="v99.0.0",
     )
     result = subprocess.run(
-        ["bash", str(GETVERSION), "--strip-v"],
+        [bash_executable, str(GETVERSION), "--strip-v"],
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, f"stdout={result.stdout!r}, stderr={result.stderr!r}"
     assert result.stdout.strip() == "0.14.0.dev-deadbeef"

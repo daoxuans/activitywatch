@@ -21,6 +21,7 @@ on:
       - scripts/patches/aw-tauri-windows-portable.patch
       - scripts/patches/aw-tauri-summary-share.patch
       - scripts/tests/test_check_tauri_server.py
+      - scripts/tests/conftest.py
       - scripts/tests/test_configure_tauri_release.py
       - scripts/tests/test_getversion.py
       - scripts/tests/test_generate_latest_json.py
