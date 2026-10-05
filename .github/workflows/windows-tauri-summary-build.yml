@@ -133,16 +133,35 @@ jobs:
           choco install innosetup --no-progress --yes
           python -m pip install --disable-pip-version-check poetry==2.2.1
 
-      - name: Test the pinned Tauri configuration
+      - name: Create ActivityWatch Python environment
+        run: python -m venv venv
+
+      - name: Install pinned ActivityWatch Python dependencies
         run: |
-          python -m venv venv
           source venv/Scripts/activate
+          python --version
+          poetry --version
           poetry install
-          python -m pytest \
-            scripts/tests/test_check_tauri_server.py \
-            scripts/tests/test_configure_tauri_release.py \
-            scripts/tests/test_getversion.py \
-            scripts/tests/test_generate_latest_json.py -q
+
+      - name: Test pinned Tauri server compatibility
+        run: |
+          source venv/Scripts/activate
+          python -m pytest scripts/tests/test_check_tauri_server.py -q -x --tb=short
+
+      - name: Test Tauri release configuration
+        run: |
+          source venv/Scripts/activate
+          python -m pytest scripts/tests/test_configure_tauri_release.py -q -x --tb=short
+
+      - name: Test CI build version selection
+        run: |
+          source venv/Scripts/activate
+          python -m pytest scripts/tests/test_getversion.py -q -x --tb=short
+
+      - name: Test updater manifest generation
+        run: |
+          source venv/Scripts/activate
+          python -m pytest scripts/tests/test_generate_latest_json.py -q -x --tb=short
 
       - name: Verify pinned Tauri server and disable updater in the test build
         run: |
