@@ -20,3 +20,13 @@ __pycache__
 # Misc
 .*cache
 .DS_Store
+
+# Summary client local state and short-lived test fixtures (may hold test keys).
+share-client/state.json
+share-client/state.json.lock
+share-client/tests/.https-test-*
+share-client/tests/.cli-test-*
+share-client/tests/.state-upload-*
+share-client/tests/client-flow-*/
+share-client/tests/uploader-test-*/
+share-client/*.spec

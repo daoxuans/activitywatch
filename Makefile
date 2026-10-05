@@ -252,6 +252,14 @@ endif
 	rm -f dist/activitywatch/libfreetype.so.6
 # Remove unnecessary files
 	rm -rf dist/activitywatch/pytz
+	# Optional visible summary-sharing client, built with Python 3.11 on the
+	# Windows CI runner. Stage it before package-all.sh creates the ZIP/setup.
+ifneq ($(strip $(AW_SHARE_BINARY)),)
+	@test -f "$(AW_SHARE_BINARY)" || { echo "Missing AW_SHARE_BINARY: $(AW_SHARE_BINARY)" >&2; exit 2; }
+	cp "$(AW_SHARE_BINARY)" dist/activitywatch/aw-share.exe
+	cp share-client/categories.example.json dist/activitywatch/categories.example.json
+	cp share-client/README.md dist/activitywatch/README-share-client.md
+endif
 # Builds zips and setups
 	bash scripts/package/package-all.sh
 

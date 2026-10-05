@@ -6,6 +6,8 @@ name: Release
 #   - schedule / workflow_dispatch: decide whether to create a new dev prerelease tag
 #   - push / pull_request: run the normal build matrices
 #   - tag push: run both build matrices, generate release notes, and publish one draft release
+# Forks use their own build workflows; none of these upstream release jobs
+# should consume minutes or create tags/releases in a private fork.
 
 on:
   schedule:
@@ -60,8 +62,9 @@ jobs:
     # Never mint a dev release from the nightly cron or from a dispatch that
     # moved submodules off their pinned pointers.
     if: >-
-      (github.event_name == 'schedule' && github.event.schedule != '0 3 * * *')
-      || (github.event_name == 'workflow_dispatch' && inputs.submodules != 'latest')
+      github.repository == 'ActivityWatch/activitywatch'
+      && ((github.event_name == 'schedule' && github.event.schedule != '0 3 * * *')
+      || (github.event_name == 'workflow_dispatch' && inputs.submodules != 'latest'))
     runs-on: ubuntu-latest
     concurrency:
       group: dev-release
@@ -234,7 +237,7 @@ jobs:
   create-tag:
     name: Create dev release tag
     needs: preflight
-    if: needs.preflight.outputs.should_release == 'true'
+    if: github.repository == 'ActivityWatch/activitywatch' && needs.preflight.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: dev-release
@@ -288,8 +291,9 @@ jobs:
     # `name:` expressions already treat as pinned mode.
     name: Resolve latest submodule tips (nightly)
     if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
-      || inputs.submodules == 'latest'
+      github.repository == 'ActivityWatch/activitywatch'
+      && ((github.event_name == 'schedule' && github.event.schedule == '0 3 * * *')
+      || inputs.submodules == 'latest')
     runs-on: ubuntu-latest
     outputs:
       latest: ${{ steps.resolve.outputs.latest }}
@@ -387,7 +391,8 @@ jobs:
     # Normal triggers as before; additionally the nightly cron, but only when
     # a submodule actually moved off its committed pointer.
     if: >-
-      !cancelled()
+      github.repository == 'ActivityWatch/activitywatch'
+      && !cancelled()
       && contains(fromJSON('["success", "skipped"]'), needs.nightly-submodules.result)
       && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
       || (needs.nightly-submodules.outputs.latest == 'true' && needs.nightly-submodules.outputs.moved == 'true'))
@@ -461,7 +466,8 @@ jobs:
     # Normal triggers as before; additionally the nightly cron, but only when
     # a submodule actually moved off its committed pointer.
     if: >-
-      !cancelled()
+      github.repository == 'ActivityWatch/activitywatch'
+      && !cancelled()
       && contains(fromJSON('["success", "skipped"]'), needs.nightly-submodules.result)
       && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
       || (needs.nightly-submodules.outputs.latest == 'true' && needs.nightly-submodules.outputs.moved == 'true'))
@@ -821,7 +827,8 @@ jobs:
     # Normal triggers as before; additionally the nightly cron, but only when
     # a submodule actually moved off its committed pointer.
     if: >-
-      !cancelled()
+      github.repository == 'ActivityWatch/activitywatch'
+      && !cancelled()
       && contains(fromJSON('["success", "skipped"]'), needs.nightly-submodules.result)
       && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
       || (needs.nightly-submodules.outputs.latest == 'true' && needs.nightly-submodules.outputs.moved == 'true'))
@@ -1129,7 +1136,8 @@ jobs:
     # Normal triggers as before; additionally the nightly cron, but only when
     # a submodule actually moved off its committed pointer.
     if: >-
-      !cancelled()
+      github.repository == 'ActivityWatch/activitywatch'
+      && !cancelled()
       && contains(fromJSON('["success", "skipped"]'), needs.nightly-submodules.result)
       && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
       || (needs.nightly-submodules.outputs.latest == 'true' && needs.nightly-submodules.outputs.moved == 'true'))
@@ -1591,7 +1599,7 @@ jobs:
 
   release-notes:
     name: Generate release notes
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'ActivityWatch/activitywatch' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -1702,7 +1710,7 @@ jobs:
 
   release:
     name: Publish draft release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'ActivityWatch/activitywatch' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [build-qt, build-qt-manylinux-2-28, build-tauri, release-notes]
     runs-on: ubuntu-latest
     steps:

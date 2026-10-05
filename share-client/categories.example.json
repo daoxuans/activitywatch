@@ -1,0 +1,14 @@
+{
+  "apps": {
+    "Code.exe": "学习办公",
+    "WeChat.exe": "通讯",
+    "steam.exe": "游戏"
+  },
+  "domains": {
+    "example.edu": "学习",
+    "bilibili.com": "影音"
+  },
+  "browsers": {
+    "yandex": ["browser.exe"]
+  }
+}
