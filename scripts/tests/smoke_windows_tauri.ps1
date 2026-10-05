@@ -12,9 +12,9 @@ if (-not $installPath.StartsWith($runnerTemp + '\', [StringComparison]::OrdinalI
 $exe = Join-Path $installPath 'aw-tauri.exe'
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing Tauri executable: $exe" }
 
-$profile = "ci-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
-if ($profile -cnotmatch '^ci-[0-9]+-[0-9]+$' -or $profile.Length -gt 32) {
-  throw "Invalid isolated test profile: $profile"
+$ciProfile = "ci-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
+if ($ciProfile -cnotmatch '^ci-[0-9]+-[0-9]+$' -or $ciProfile.Length -gt 32) {
+  throw "Invalid isolated test profile: $ciProfile"
 }
 
 $portReservation = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
@@ -31,7 +31,7 @@ try {
   # The install directory is deliberately NOT added to PATH: the patched
   # Tauri manager must discover its own bundled watchers from this location.
   $tauri = Start-Process -FilePath $exe -WorkingDirectory $installPath `
-    -ArgumentList @('--daemon', '--profile', $profile, '--port', "$port") `
+    -ArgumentList @('--daemon', '--profile', $ciProfile, '--port', "$port") `
     -PassThru -WindowStyle Hidden
 
   $deadline = [DateTime]::UtcNow.AddSeconds(90)
@@ -47,7 +47,7 @@ try {
     }
   }
   if ($null -eq $info) { throw "Tauri did not serve $baseUrl/info within 90 seconds" }
-  if ($info.profile -cne $profile -or -not $info.hostname -or -not $info.device_id) {
+  if ($info.profile -cne $ciProfile -or -not $info.hostname -or -not $info.device_id) {
     throw "Unexpected server identity at $baseUrl/info"
   }
   $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue)
@@ -79,14 +79,14 @@ try {
 
       $client = $expected[$name].client
       $kind = $expected[$name].type
-      $matches = @($entries | Where-Object { $_.Value.client -eq $client -and $_.Value.type -eq $kind })
-      if ($matches.Count -ne 1) { $ready = $false; break }
-      $bucket = $matches[0].Value
+      $bucketMatches = @($entries | Where-Object { $_.Value.client -eq $client -and $_.Value.type -eq $kind })
+      if ($bucketMatches.Count -ne 1) { $ready = $false; break }
+      $bucket = $bucketMatches[0].Value
       $expectedId = '{0}_{1}' -f $client, $bucket.hostname
-      if ($matches[0].Name -cne $expectedId -or $bucket.hostname -ine $info.hostname) {
+      if ($bucketMatches[0].Name -cne $expectedId -or $bucket.hostname -ine $info.hostname) {
         throw "Watcher $client registered a bucket for a different host or identity"
       }
-      $matchedBuckets[$name] = $matches[0].Name
+      $matchedBuckets[$name] = $bucketMatches[0].Name
     }
 
     if ($ready) { $verified = $true; break }
