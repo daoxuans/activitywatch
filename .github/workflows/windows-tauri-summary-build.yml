@@ -149,9 +149,37 @@ jobs:
           python -m pytest scripts/tests/test_check_tauri_server.py -q -x --tb=short
 
       - name: Test Tauri release configuration
+        id: tauri_release_config
         run: |
           source venv/Scripts/activate
-          python -m pytest scripts/tests/test_configure_tauri_release.py -q -x --tb=short
+          python -m pytest scripts/tests/test_configure_tauri_release.py -q -x --tb=short --junitxml="$RUNNER_TEMP/tauri-config-junit.xml"
+
+      # Public check annotations retain the first test failure even when the
+      # job log requires repository-admin access. The test uses fixture keys,
+      # and this emits only its bounded failure message, not environment values.
+      - name: Annotate Tauri release configuration failure
+        if: failure() && steps.tauri_release_config.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $reportPath = Join-Path $env:RUNNER_TEMP 'tauri-config-junit.xml'
+          if (-not (Test-Path -LiteralPath $reportPath)) {
+            Write-Output '::error title=Tauri config pytest::No JUnit report was written; inspect the previous step.'
+            exit 0
+          }
+          [xml]$report = Get-Content -LiteralPath $reportPath -Raw
+          $failed = $report.SelectSingleNode('//testcase[failure or error]')
+          if ($null -eq $failed) {
+            Write-Output '::error title=Tauri config pytest::The step failed without a failed test case.'
+            exit 0
+          }
+          $detail = $failed.SelectSingleNode('failure|error')
+          $summary = "$($failed.GetAttribute('name')): $($detail.GetAttribute('message'))"
+          if ($summary.Length -gt 2400) {
+            $summary = $summary.Substring(0, 1200) + ' ... ' + $summary.Substring($summary.Length - 1200)
+          }
+          $summary = $summary.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+          Write-Output "::error file=scripts/tests/test_configure_tauri_release.py,title=Tauri config pytest::$summary"
 
       - name: Test CI build version selection
         run: |
