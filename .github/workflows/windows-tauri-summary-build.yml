@@ -19,6 +19,7 @@ on:
       - scripts/package/getversion.sh
       - scripts/package/package-all.sh
       - scripts/patches/aw-tauri-windows-portable.patch
+      - scripts/patches/aw-tauri-summary-share.patch
       - scripts/tests/test_check_tauri_server.py
       - scripts/tests/test_configure_tauri_release.py
       - scripts/tests/test_getversion.py
@@ -61,10 +62,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Apply the fork's portable Windows module discovery fix
+      - name: Apply the fork's Tauri Windows and visible sharing patches
         run: |
           git -C aw-tauri apply --check ../scripts/patches/aw-tauri-windows-portable.patch
           git -C aw-tauri apply ../scripts/patches/aw-tauri-windows-portable.patch
+          git -C aw-tauri apply --check ../scripts/patches/aw-tauri-summary-share.patch
+          git -C aw-tauri apply ../scripts/patches/aw-tauri-summary-share.patch
+          cp share-client/tauri/src/summary_share_ui.rs aw-tauri/src-tauri/src/summary_share_ui.rs
+          cp share-client/tauri/capabilities/summary-share.json aw-tauri/src-tauri/capabilities/summary-share.json
+          cp share-client/tauri/permissions/summary-share.toml aw-tauri/src-tauri/permissions/summary-share.toml
+          cp share-client/tauri/assets/summary-share.html aw-tauri/src-tauri/assets/summary-share.html
 
       - name: Set up Python for the visible summary client
         uses: actions/setup-python@v7
@@ -153,6 +160,7 @@ jobs:
         run: |
           source venv/Scripts/activate
           make build SKIP_WEBUI=false SKIP_SERVER_RUST=false
+          (cd aw-tauri/src-tauri && cargo test --locked --lib summary_share_ui::tests::only_visible_local_actions_are_allowed)
           make test SKIP_SERVER_RUST=false
           poetry install
           make package SKIP_SERVER_RUST=false AW_SHARE_BINARY=build/share-client-dist/aw-share.exe

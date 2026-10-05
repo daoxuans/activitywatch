@@ -1,0 +1,110 @@
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -27,4 +27,5 @@
+ mod mini;
+ mod module_alert_ui;
+ mod profile;
++mod summary_share_ui;
+ mod updater_ui;
+@@ -968,4 +969,18 @@
+                 .body(updater_ui::PROGRESS_HTML.as_bytes().to_vec())
+                 .unwrap()
+         })
++        // A bundled, static window for local summary-sharing controls. It is
++        // never served by the HTTP dashboard and has a separate capability.
++        .register_uri_scheme_protocol(summary_share_ui::URI_SCHEME, |_ctx, request| {
++            if request.uri().path() != "/" {
++                return tauri::http::Response::builder().status(404).body(Vec::new()).unwrap();
++            }
++            tauri::http::Response::builder()
++                .status(200)
++                .header("Content-Type", "text/html; charset=utf-8")
++                .header("X-Content-Type-Options", "nosniff")
++                .header("Cache-Control", "no-store")
++                .body(summary_share_ui::SUMMARY_HTML.as_bytes().to_vec())
++                .unwrap()
++        })
+         .setup(|app| {
+@@ -995,4 +1010,9 @@
+                     };
++                summary_share_ui::bind_local_server(
++                    &cli_args.profile,
++                    aw_config.port,
++                    aw_config.auth.api_key.as_deref(),
++                );
+                 let rocket_handle =
+                     tauri::async_runtime::spawn(build_rocket(server_state, aw_config).launch());
+                 // Create main window programmatically to attach initialization script.
+@@ -1055,5 +1075,6 @@
+                 let quit = MenuItem::with_id(app, "quit", "Quit ActivityWatch", true, None::<&str>)
+                     .expect("Failed to create quit menu item");
+                 let autostart_item = autostart::build_menu_item(app.handle());
++                let summary_share_item = summary_share_ui::menu_item(app.handle());
+-
++
+                 // Placeholder tray menu, replaced by manager::build_tray_menu once
+@@ -1061,3 +1082,7 @@
+                 // available even if no modules are ever found.
+-                let menu = Menu::with_items(app, &[&open, &autostart_item, &quit])
++                let menu = if let Some(ref share_item) = summary_share_item {
++                    Menu::with_items(app, &[&open, share_item, &autostart_item, &quit])
++                } else {
++                    Menu::with_items(app, &[&open, &autostart_item, &quit])
++                }
+                     .expect("Failed to create tray menu");
+@@ -1115,5 +1140,7 @@
+                     } else if event.id().0 == autostart::MENU_ID {
+                         autostart::handle_menu_click(app);
+-                    } else {
++                    } else if event.id().0 == summary_share_ui::MENU_ID {
++                        summary_share_ui::show_window(app);
++                    } else {
+                         // Modules menu clicks
+                         let mut state = manager_state
+@@ -1240,3 +1267,4 @@
+             get_autostart_enabled,
+-            set_autostart_enabled
++            set_autostart_enabled,
++            summary_share_ui::summary_share_action
+         ])
+diff --git a/src-tauri/src/manager.rs b/src-tauri/src/manager.rs
+--- a/src-tauri/src/manager.rs
++++ b/src-tauri/src/manager.rs
+@@ -361,2 +361,3 @@
+     let autostart_item = crate::autostart::build_menu_item(app);
++    let summary_share_item = crate::summary_share_ui::menu_item(app);
+     let separator = PredefinedMenuItem::separator(app).expect("Failed to create separator");
+@@ -363,17 +364,16 @@
+-    let menu = Menu::with_items(
+-        app,
+-        &[
+-            &open,
+-            &separator,
+-            &module_submenu,
+-            &separator,
+-            &autostart_item,
+-            &config_folder,
+-            &log_folder,
+-            &separator,
+-            &quit,
+-        ],
+-    )
+-    .expect("Failed to create tray menu");
++    let menu = if let Some(ref share_item) = summary_share_item {
++        Menu::with_items(
++            app,
++            &[&open, &separator, &module_submenu, &separator,
++              &autostart_item, share_item, &config_folder, &log_folder, &separator, &quit],
++        )
++    } else {
++        Menu::with_items(
++            app,
++            &[&open, &separator, &module_submenu, &separator,
++              &autostart_item, &config_folder, &log_folder, &separator, &quit],
++        )
++    }
++    .expect("Failed to create tray menu");
+-
++
+     let tray_id = get_tray_id();

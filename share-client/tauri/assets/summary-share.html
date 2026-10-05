@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ActivityWatch · 汇总分享控制</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --fg: #1a1a1a;
+      --muted: #515b6b;
+      --border: #dbe1e9;
+      --subtle: #f1f4f8;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-fg: #ffffff;
+      --danger: #b42318;
+      --danger-hover: #912018;
+      --disabled: #c5ccd6;
+      --disabled-fg: #374151;
+      --focus: #2563eb;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121418;
+        --surface: #1a1d24;
+        --fg: #f3f4f6;
+        --muted: #b1bac8;
+        --border: #3c4553;
+        --subtle: #242a33;
+        --accent: #60a5fa;
+        --accent-hover: #93c5fd;
+        --accent-fg: #102036;
+        --danger: #fca5a5;
+        --danger-hover: #fecaca;
+        --disabled: #374151;
+        --disabled-fg: #bac3d0;
+        --focus: #93c5fd;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    ::selection { background: var(--accent); color: var(--surface); }
+
+    .shell { max-width: 720px; margin: 0 auto; padding: 24px; }
+
+    .surface {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 650; letter-spacing: -0.02em; }
+    h2 { margin: 0; font-size: 19px; line-height: 1.35; font-weight: 650; }
+    h3 { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 650; }
+    p { margin: 0; }
+    .intro { color: var(--muted); margin-top: 8px; }
+    .local-label {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }
+
+    .boundaries {
+      margin: 22px 0 0;
+      padding: 15px 17px;
+      background: var(--subtle);
+      border-radius: 9px;
+    }
+    .boundaries h2 { font-size: 15px; }
+    .boundaries ul { margin: 8px 0 0; padding-left: 20px; }
+    .boundaries li + li { margin-top: 5px; }
+
+    .status-section { margin-top: 26px; }
+    .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .refresh-note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .result {
+      display: block;
+      margin: 11px 0 0;
+      padding: 12px 14px;
+      min-height: 48px;
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: var(--subtle);
+      border-radius: 8px;
+      font: inherit;
+      user-select: text;
+    }
+    .result[hidden] { display: none; }
+    .preview-result { max-height: 260px; }
+
+    .actions { margin-top: 30px; }
+    .actions > h2 { margin-bottom: 2px; }
+    .action {
+      padding: 18px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .action:last-child { border-bottom: 0; padding-bottom: 0; }
+    .action-description { margin-top: 5px; color: var(--muted); }
+    .confirmation { display: block; margin-top: 12px; font-size: 15px; }
+    .confirmation strong { color: var(--fg); font-weight: 650; }
+    .controls { display: flex; gap: 9px; margin-top: 7px; }
+
+    input, button { font: inherit; }
+    input {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--fg);
+    }
+    input::placeholder { color: var(--muted); opacity: 1; }
+    input:disabled { opacity: 0.7; }
+    button {
+      flex: 0 0 auto;
+      appearance: none;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      font-size: 15px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+    button:disabled { background: var(--disabled); border-color: var(--disabled); color: var(--disabled-fg); cursor: not-allowed; }
+    button.secondary { background: transparent; color: var(--accent); }
+    button.secondary:hover:not(:disabled) { color: var(--surface); }
+    button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+    button.danger:hover:not(:disabled) { background: var(--danger-hover); border-color: var(--danger-hover); color: var(--surface); }
+    button.secondary:disabled, button.danger:disabled { background: transparent; border-color: var(--disabled); color: var(--disabled-fg); }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    @media (max-width: 520px) {
+      .shell { padding: 12px; }
+      .surface { padding: 18px; }
+      .header { flex-direction: column; gap: 10px; }
+      .controls { flex-direction: column; }
+      .controls button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="surface">
+      <header class="header">
+        <div>
+          <h1>汇总分享控制</h1>
+          <p class="intro">查看本机分享状态，或在本人确认后执行操作。</p>
+        </div>
+        <span class="local-label">ActivityWatch · 本机</span>
+      </header>
+
+      <section class="boundaries" aria-labelledby="boundaries-heading">
+        <h2 id="boundaries-heading">这些操作的边界</h2>
+        <ul>
+          <li>本机预览只在此窗口展示汇总，不会开启分享或上传。</li>
+          <li>暂停分享与撤回授权都不会停止 ActivityWatch 在本机记录。</li>
+          <li>云端已接收的数据需另行向接收端删除；撤回本地授权不等于删除云端数据。</li>
+          <li>本轮未提供图形界面开启分享授权，也不会自动上传。</li>
+        </ul>
+      </section>
+
+      <section class="status-section" aria-labelledby="status-heading">
+        <div class="section-heading">
+          <h2 id="status-heading">当前分享状态</h2>
+          <button type="button" class="secondary" id="refresh-button" disabled>刷新状态</button>
+        </div>
+        <p class="refresh-note" id="refresh-note">每 20 秒自动刷新，窗口重新显示时也会刷新。</p>
+        <pre class="result" id="status-result" role="status" aria-live="polite">正在读取本机状态…</pre>
+      </section>
+
+      <section class="actions" aria-labelledby="actions-heading">
+        <h2 id="actions-heading">本人确认后操作</h2>
+
+        <div class="action" aria-labelledby="preview-heading">
+          <h3 id="preview-heading">预览今日汇总</h3>
+          <p class="action-description">仅读取本机活动，预览结果留在此窗口；不会保存分享授权。</p>
+          <form id="preview-form" autocomplete="off">
+            <label class="confirmation" for="preview-confirmation">确认短语：<strong>我同意本机预览</strong></label>
+            <div class="controls">
+              <input id="preview-confirmation" type="text" placeholder="输入确认短语" spellcheck="false" autocapitalize="off" autocomplete="off" disabled />
+              <button type="submit" id="preview-button" disabled>本机预览</button>
+            </div>
+          </form>
+          <pre class="result preview-result" id="preview-result" aria-label="本机预览结果" hidden></pre>
+        </div>
+
+        <div class="action" aria-labelledby="pause-heading">
+          <h3 id="pause-heading">暂停分享</h3>
+          <p class="action-description">停止本客户端后续分享，不停止 ActivityWatch 本机记录。</p>
+          <form id="pause-form" autocomplete="off">
+            <label class="confirmation" for="pause-confirmation">确认短语：<strong>暂停分享</strong></label>
+            <div class="controls">
+              <input id="pause-confirmation" type="text" placeholder="输入确认短语" spellcheck="false" autocapitalize="off" autocomplete="off" disabled />
+              <button type="submit" id="pause-button" class="secondary" disabled>暂停分享</button>
+            </div>
+          </form>
+          <pre class="result" id="pause-result" role="status" aria-live="polite" hidden></pre>
+        </div>
+
+        <div class="action" aria-labelledby="revoke-heading">
+          <h3 id="revoke-heading">撤回授权</h3>
+          <p class="action-description">清除本客户端的本地授权历史；云端已收数据不会因此删除。</p>
+          <form id="revoke-form" autocomplete="off">
+            <label class="confirmation" for="revoke-confirmation">确认短语：<strong>撤回授权</strong></label>
+            <div class="controls">
+              <input id="revoke-confirmation" type="text" placeholder="输入确认短语" spellcheck="false" autocapitalize="off" autocomplete="off" disabled />
+              <button type="submit" id="revoke-button" class="danger" disabled>撤回授权</button>
+            </div>
+          </form>
+          <pre class="result" id="revoke-result" role="status" aria-live="polite" hidden></pre>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var statusResult = document.getElementById('status-result');
+      var refreshButton = document.getElementById('refresh-button');
+      var actions = [
+        { name: 'local-preview', confirmation: '我同意本机预览', form: 'preview-form', input: 'preview-confirmation', button: 'preview-button', result: 'preview-result' },
+        { name: 'pause', confirmation: '暂停分享', form: 'pause-form', input: 'pause-confirmation', button: 'pause-button', result: 'pause-result' },
+        { name: 'revoke', confirmation: '撤回授权', form: 'revoke-form', input: 'revoke-confirmation', button: 'revoke-button', result: 'revoke-result' }
+      ];
+      var busy = false;
+      var statusRequestId = 0;
+
+      function hasBridge() {
+        return !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
+      }
+
+      function invoke(action, confirmation) {
+        if (!hasBridge()) {
+          return Promise.reject(new Error('桌面接口不可用，请在 ActivityWatch 桌面窗口中操作。'));
+        }
+        return Promise.resolve().then(function () {
+          return window.__TAURI_INTERNALS__.invoke('summary_share_action', {
+            action: action,
+            confirmation: confirmation
+          });
+        });
+      }
+
+      function errorText(error) {
+        return error && typeof error.message === 'string' ? error.message : String(error);
+      }
+
+      function renderControls() {
+        var available = hasBridge() && !busy;
+        refreshButton.disabled = !available;
+        actions.forEach(function (item) {
+          item.input.disabled = !available;
+          item.button.disabled = !available || item.input.value !== item.confirmation;
+        });
+      }
+
+      function refreshStatus(showLoading) {
+        if (busy) return Promise.resolve();
+        var requestId = ++statusRequestId;
+        if (showLoading) statusResult.textContent = '正在读取本机状态…';
+        return invoke('status', null).then(function (result) {
+          if (requestId === statusRequestId && !busy) statusResult.textContent = String(result);
+        }).catch(function (error) {
+          if (requestId === statusRequestId && !busy) statusResult.textContent = '状态读取失败：' + errorText(error);
+        });
+      }
+
+      function runAction(item) {
+        if (busy || !hasBridge() || item.input.value !== item.confirmation) return;
+        busy = true;
+        ++statusRequestId;
+        renderControls();
+        item.result.hidden = false;
+        item.result.textContent = '正在执行，请稍候…';
+
+        invoke(item.name, item.confirmation).then(function (result) {
+          item.result.textContent = String(result);
+        }).catch(function (error) {
+          item.result.textContent = '操作未完成：' + errorText(error);
+        }).finally(function () {
+          item.input.value = '';
+          busy = false;
+          renderControls();
+          refreshStatus(false);
+        });
+      }
+
+      actions.forEach(function (item) {
+        item.form = document.getElementById(item.form);
+        item.input = document.getElementById(item.input);
+        item.button = document.getElementById(item.button);
+        item.result = document.getElementById(item.result);
+        item.input.addEventListener('input', renderControls);
+        item.form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          runAction(item);
+        });
+      });
+
+      refreshButton.addEventListener('click', function () { refreshStatus(true); });
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) refreshStatus(false);
+      });
+      window.setInterval(function () {
+        if (!document.hidden) refreshStatus(false);
+      }, 20000);
+
+      renderControls();
+      refreshStatus(true);
+    })();
+  </script>
+</body>
+</html>

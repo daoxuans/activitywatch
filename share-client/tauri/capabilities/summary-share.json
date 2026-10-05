@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "summary-share",
+  "description": "Local, opt-in summary controls separate from the HTTP dashboard",
+  "platforms": ["windows"],
+  "windows": ["summary-share"],
+  "permissions": ["core:default", "allow-summary-share-action"]
+}

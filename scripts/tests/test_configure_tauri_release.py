@@ -111,7 +111,13 @@ def test_standard_version_changes_without_changing_update_trust(config):
     assert result.returncode == 0, result.stderr
     after = json.loads(config.read_text())
     assert after["version"] == "0.14.0-rc.2"
+    assert after["plugins"]["updater"] == before["plugins"]["updater"]
     before["version"] = after["version"]
+    if sys.platform == "win32":
+        # Windows drops MSI for non-numeric prereleases; that is unrelated to
+        # the updater's endpoint and public key.
+        assert after["bundle"]["targets"] == ["nsis"]
+        before["bundle"]["targets"] = ["nsis"]
     assert after == before
 
 
@@ -249,7 +255,7 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
     research,
     success,
 ):
-    workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     step = workflow.split(
         "      - name: Configure Tauri release version and update channel\n"
     )[1]

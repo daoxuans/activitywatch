@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-summary-share-action"
+description = "Allows the isolated summary window to inspect local state, preview, pause, or revoke sharing."
+commands.allow = ["summary_share_action"]
