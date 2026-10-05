@@ -206,7 +206,17 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_output_encoding() -> None:
+    # Windows runners and redirected consoles can default to cp1252, which
+    # cannot write the Chinese help, status, or error messages of this CLI.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _configure_output_encoding()
     args = _parser().parse_args(argv)
     try:
         zone = _utc_offset(args.utc_offset)

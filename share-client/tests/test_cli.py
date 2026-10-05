@@ -46,6 +46,21 @@ def invoke(argv):
     return code, stdout.getvalue(), stderr.getvalue()
 
 
+def invoke_cp1252(argv):
+    """Simulate Windows output redirected through a legacy-codepage pipe."""
+    stdout_bytes, stderr_bytes = io.BytesIO(), io.BytesIO()
+    stdout = io.TextIOWrapper(stdout_bytes, encoding="cp1252")
+    stderr = io.TextIOWrapper(stderr_bytes, encoding="cp1252")
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        try:
+            code = cli.main(argv)
+        except SystemExit as exc:
+            code = exc.code
+    stdout.flush()
+    stderr.flush()
+    return code, stdout_bytes.getvalue().decode("utf-8"), stderr_bytes.getvalue().decode("utf-8")
+
+
 def aw_event(start, seconds, data, **extra):
     return {
         "timestamp": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -91,6 +106,30 @@ class CliTests(unittest.TestCase):
     def setUp(self):
         self.state_file = fixture_path(self, ".json")
         self.base_args = ["--state-file", str(self.state_file)]
+
+    def test_help_status_and_errors_work_with_cp1252_output(self):
+        cases = (
+            ([*self.base_args, "--help"], 0, "仅在明确启用", ""),
+            ([*self.base_args, "status"], 0, "分享状态：", ""),
+            (
+                [*self.base_args, "--utc-offset", "bad", "status"],
+                1,
+                "",
+                "操作未完成：时区偏移",
+            ),
+        )
+        for argv, expected_code, stdout_text, stderr_text in cases:
+            with self.subTest(argv=argv):
+                code, output, error = invoke_cp1252(argv)
+                self.assertEqual(code, expected_code)
+                if stdout_text:
+                    self.assertIn(stdout_text, output)
+                else:
+                    self.assertEqual(output, "")
+                if stderr_text:
+                    self.assertIn(stderr_text, error)
+                else:
+                    self.assertEqual(error, "")
 
     def test_status_is_disabled_by_default_and_does_not_contact_watchers(self):
         with patch.object(cli, "_aw_client", side_effect=AssertionError("AW contacted")), patch.object(
