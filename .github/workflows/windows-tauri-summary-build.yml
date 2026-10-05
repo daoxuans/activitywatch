@@ -1,0 +1,237 @@
+name: Windows Tauri summary client build
+
+# Fork-safe test packages only: no tags, Releases, updater feed, or signing secrets.
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/windows-tauri-summary-build.yml
+      - .gitmodules
+      - Makefile
+      - pyproject.toml
+      - poetry.lock
+      - share-client/**
+      - scripts/check_tauri_server.py
+      - scripts/package/aw-tauri.iss
+      - scripts/package/collect-setup.sh
+      - scripts/package/configure_tauri_release.py
+      - scripts/package/generate_latest_json.py
+      - scripts/package/getversion.sh
+      - scripts/package/package-all.sh
+      - scripts/patches/aw-tauri-windows-portable.patch
+      - scripts/tests/test_check_tauri_server.py
+      - scripts/tests/test_configure_tauri_release.py
+      - scripts/tests/test_getversion.py
+      - scripts/tests/test_generate_latest_json.py
+      - scripts/tests/smoke_windows_tauri.ps1
+      - aw-core
+      - aw-client
+      - aw-server
+      - aw-server-rust
+      - aw-tauri
+      - aw-watcher-afk
+      - aw-watcher-window
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-tauri-summary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 240
+    env:
+      # The summary needs the window and AFK watchers; optional input/notify
+      # modules are deliberately outside this first Tauri test package.
+      AW_EXTRAS: "false"
+      TAURI_BUILD: "true"
+      POETRY_INSTALLER_PARALLEL: "false"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out pinned ActivityWatch submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Apply the fork's portable Windows module discovery fix
+        run: |
+          git -C aw-tauri apply --check ../scripts/patches/aw-tauri-windows-portable.patch
+          git -C aw-tauri apply ../scripts/patches/aw-tauri-windows-portable.patch
+
+      - name: Set up Python for the visible summary client
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Set a deterministic unsigned fork test version
+        run: |
+          set -euo pipefail
+          BASE_VERSION="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['tool']['poetry']['version'])")"
+          [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Unsupported base version: $BASE_VERSION" >&2; exit 2; }
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          echo "AW_BUILD_VERSION=v${BASE_VERSION}.dev-${SHORT_SHA}" >> "$GITHUB_ENV"
+
+      - name: Install summary client test and packaging dependencies
+        run: python -m pip install --disable-pip-version-check cryptography pyinstaller==6.11.0
+
+      - name: Test the consent and summary client
+        working-directory: share-client
+        run: >-
+          python -B -c "import unittest;
+          suite = unittest.defaultTestLoader.discover('tests');
+          result = unittest.TextTestRunner(verbosity=2).run(suite);
+          raise SystemExit(0 if result.wasSuccessful() and not result.skipped else 1)"
+
+      - name: Build visible summary client executable
+        run: |
+          mkdir -p build/share-client-spec
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name aw-share \
+            --paths share-client \
+            --distpath build/share-client-dist \
+            --workpath build/share-client-work \
+            --specpath build/share-client-spec \
+            share-client/launcher.py
+
+      - name: Smoke-test summary client executable
+        run: |
+          build/share-client-dist/aw-share.exe --help
+          build/share-client-dist/aw-share.exe status
+
+      - name: Set up Python for ActivityWatch
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Set up Rust on the GitHub runner
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+        with:
+          toolchain: stable
+
+      - name: Install Inno Setup and Poetry on the runner
+        run: |
+          choco install innosetup --no-progress --yes
+          python -m pip install --disable-pip-version-check poetry==2.2.1
+
+      - name: Test the pinned Tauri configuration
+        run: |
+          python -m venv venv
+          source venv/Scripts/activate
+          poetry install
+          python -m pytest \
+            scripts/tests/test_check_tauri_server.py \
+            scripts/tests/test_configure_tauri_release.py \
+            scripts/tests/test_getversion.py \
+            scripts/tests/test_generate_latest_json.py -q
+
+      - name: Verify pinned Tauri server and disable updater in the test build
+        run: |
+          set -euo pipefail
+          source venv/Scripts/activate
+          VERSION_NO_V="$(bash scripts/package/getversion.sh --strip-v)"
+          python scripts/check_tauri_server.py "$VERSION_NO_V"
+          python scripts/package/configure_tauri_release.py \
+            --config aw-tauri/src-tauri/tauri.conf.json \
+            --version "$VERSION_NO_V" \
+            --disable-updater
+          python -c "import json; config=json.load(open('aw-tauri/src-tauri/tauri.conf.json', encoding='utf-8')); updater=config['plugins']['updater']; assert updater['endpoints'] == [] and updater['pubkey'] == '', 'Test builds must not trust an updater feed'"
+
+      - name: Build, test, and package Tauri with the summary client
+        run: |
+          source venv/Scripts/activate
+          make build SKIP_WEBUI=false SKIP_SERVER_RUST=false
+          make test SKIP_SERVER_RUST=false
+          poetry install
+          make package SKIP_SERVER_RUST=false AW_SHARE_BINARY=build/share-client-dist/aw-share.exe
+
+      - name: Verify Windows Tauri package contents
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $paths = @(
+            'dist\activitywatch\aw-tauri.exe',
+            'dist\activitywatch\share-client\aw-share.exe',
+            'dist\activitywatch\aw-server-rust\aw-sync.exe',
+            'dist\activitywatch\aw-watcher-afk\aw-watcher-afk.exe',
+            'dist\activitywatch\aw-watcher-window\aw-watcher-window.exe'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing packaged file: $path" }
+          }
+
+          $zips = @(Get-ChildItem -Path 'dist\activitywatch-tauri-*-windows-*.zip' -File)
+          $setups = @(Get-ChildItem -Path 'dist\activitywatch-tauri-*-windows-*-setup.exe' -File)
+          if ($zips.Count -ne 1) { throw "Expected one Tauri ZIP, found $($zips.Count)" }
+          if ($setups.Count -ne 1) { throw "Expected one Tauri installer, found $($setups.Count)" }
+
+          Add-Type -AssemblyName System.IO.Compression.ZipFile
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zips[0].FullName)
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+            $required = @(
+              'activitywatch/aw-tauri.exe',
+              'activitywatch/share-client/aw-share.exe',
+              'activitywatch/aw-server-rust/aw-sync.exe',
+              'activitywatch/aw-watcher-afk/aw-watcher-afk.exe',
+              'activitywatch/aw-watcher-window/aw-watcher-window.exe'
+            )
+            foreach ($entry in $required) {
+              if ($entries -notcontains $entry) { throw "Missing ZIP entry: $entry" }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Smoke-test an unattended installer on the disposable runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setups = @(Get-ChildItem -Path 'dist\activitywatch-tauri-*-windows-*-setup.exe' -File)
+          if ($setups.Count -ne 1) { throw 'Expected one Tauri installer' }
+          $target = Join-Path $env:RUNNER_TEMP 'activitywatch-tauri-summary-smoke'
+          $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /MERGETASKS=!StartMenuEntry /DIR="' + $target + '"'
+          $process = Start-Process -FilePath $setups[0].FullName -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          foreach ($relative in @(
+            'aw-tauri.exe',
+            'share-client\aw-share.exe',
+            'aw-server-rust\aw-sync.exe',
+            'aw-watcher-afk\aw-watcher-afk.exe',
+            'aw-watcher-window\aw-watcher-window.exe'
+          )) {
+            $path = Join-Path $target $relative
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Installer did not include $relative" }
+          }
+          $share = Join-Path $target 'share-client\aw-share.exe'
+          & $share status
+          if ($LASTEXITCODE -ne 0) { throw 'Installed aw-share.exe status failed' }
+
+      - name: Smoke-test bundled Tauri server and watchers from the custom install directory
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'activitywatch-tauri-summary-smoke'
+          ./scripts/tests/smoke_windows_tauri.ps1 -InstallRoot $target
+
+      - name: Upload unsigned Windows Tauri test packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: activitywatch-summary-windows-tauri-${{ github.run_number }}
+          path: |
+            dist/activitywatch-tauri-*-windows-*.zip
+            dist/activitywatch-tauri-*-windows-*-setup.exe
+          if-no-files-found: error
+          retention-days: 14

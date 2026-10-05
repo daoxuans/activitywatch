@@ -1,0 +1,14 @@
+diff --git a/src-tauri/src/manager.rs b/src-tauri/src/manager.rs
+--- a/src-tauri/src/manager.rs
++++ b/src-tauri/src/manager.rs
+@@ -1329,2 +1329,10 @@ fn discover_modules() -> BTreeMap<String, PathBuf> {
+     // Process directories in depth-first order
++    // Include the running bundle even when a persisted config points elsewhere.
++    // The stack is popped from the end, so bundled watchers win over unrelated
++    // modules in PATH or a previously installed ActivityWatch edition.
++    if let Ok(exe_path) = env::current_exe() {
++        if let Some(bundle_dir) = exe_path.parent() {
++            dirs_to_search.insert(0, bundle_dir.to_path_buf());
++        }
++    }
+     while let Some(dir) = dirs_to_search.pop() {

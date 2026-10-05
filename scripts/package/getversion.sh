@@ -15,6 +15,7 @@ Options:
     --help, -h           Show this help message
 
 Environment Variables (used in CI, checked in priority order):
+    AW_BUILD_VERSION     Explicit version for a fork's unsigned test build
     GITHUB_REF_NAME      GitHub Actions tag/ref (e.g., "v0.14.0")
     TRAVIS_TAG           Travis CI tag
     APPVEYOR_REPO_TAG_NAME AppVeyor CI tag
@@ -53,7 +54,9 @@ parse_args() {
 get_version_internal() {
     local _version=""
     
-    if [[ -n "$GITHUB_REF" && "$GITHUB_REF" == refs/tags/v* ]]; then
+    if [[ -n "$AW_BUILD_VERSION" ]]; then
+        _version="$AW_BUILD_VERSION"
+    elif [[ -n "$GITHUB_REF" && "$GITHUB_REF" == refs/tags/v* ]]; then
         _version="$GITHUB_REF_NAME"
     elif [[ -n "$TRAVIS_TAG" ]]; then
         _version="$TRAVIS_TAG"

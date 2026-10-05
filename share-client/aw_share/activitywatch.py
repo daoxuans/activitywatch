@@ -255,10 +255,12 @@ class ActivityWatchClient:
         end_iso, end_dt = _iso_time(end)
         if end_dt <= start_dt:
             raise ActivityWatchError("ActivityWatch query end must follow its start")
-        result = self._get(
-            f"buckets/{quote(bucket_id, safe='')}/events",
-            {"start": start_iso, "end": end_iso, "limit": str(limit)},
-        )
+        params = {"start": start_iso, "end": end_iso}
+        # Both servers interpret an omitted limit as unlimited. The Rust API
+        # accepts only unsigned limits, so its query cannot contain "-1".
+        if limit >= 0:
+            params["limit"] = str(limit)
+        result = self._get(f"buckets/{quote(bucket_id, safe='')}/events", params)
         if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
             raise ActivityWatchError("ActivityWatch returned invalid event data")
         return result

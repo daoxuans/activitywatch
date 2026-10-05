@@ -115,6 +115,53 @@ def test_standard_version_changes_without_changing_update_trust(config):
     assert after == before
 
 
+def test_unsigned_fork_build_has_no_updater_trust_or_update_artifacts(config):
+    before = json.loads(config.read_text())
+    result = run_configure(config, "--disable-updater", version="v0.14.0b5")
+    assert result.returncode == 0, result.stderr
+    after = json.loads(config.read_text())
+    assert after["version"] == "0.14.0-beta.5"
+    assert after["plugins"]["updater"] == {
+        **before["plugins"]["updater"],
+        "pubkey": "",
+        "endpoints": [],
+    }
+    assert after["bundle"]["createUpdaterArtifacts"] is False
+
+
+def test_unsigned_fork_build_drops_windows_msi_for_prerelease(config):
+    configure(
+        config,
+        "v0.14.0b5",
+        research=False,
+        require_signing_key=False,
+        platform="win32",
+        disable_updater=True,
+    )
+    after = json.loads(config.read_text())
+    assert after["bundle"]["targets"] == ["nsis"]
+    assert after["plugins"]["updater"]["endpoints"] == []
+
+
+@pytest.mark.parametrize("option", ["--research", "--require-signing-key"])
+def test_unsigned_fork_build_rejects_other_release_modes(config, option):
+    before = config.read_bytes()
+    result = run_configure(config, "--disable-updater", option)
+    assert result.returncode != 0
+    assert config.read_bytes() == before
+
+
+def test_unsigned_fork_build_rejects_unknown_update_feed(config):
+    data = json.loads(config.read_text())
+    data["plugins"]["updater"]["endpoints"].append("https://example.com/updates.json")
+    config.write_text(json.dumps(data))
+    before = config.read_bytes()
+    result = run_configure(config, "--disable-updater")
+    assert result.returncode != 0
+    assert "Unexpected source updater endpoint" in result.stderr
+    assert config.read_bytes() == before
+
+
 def test_research_release_replaces_endpoint_and_key(config):
     result = run_configure(
         config,

@@ -116,7 +116,7 @@ class ActivityWatchClientTests(unittest.TestCase):
             query = parse_qs(urlsplit(request.full_url).query)
             self.assertEqual(query["start"], [START.isoformat()])
             self.assertEqual(query["end"], [END.isoformat()])
-            self.assertEqual(query["limit"], ["-1"])
+            self.assertNotIn("limit", query)
 
     def test_query_encodes_bucket_id_and_keeps_cross_day_offsets(self):
         path = "/api/0/buckets/aw-watcher-web%2Fedge_PC/events"
@@ -132,10 +132,26 @@ class ActivityWatchClientTests(unittest.TestCase):
             {
                 "start": ["2026-10-05T23:55:00+08:00"],
                 "end": ["2026-10-06T00:05:00+08:00"],
-                "limit": ["-1"],
             },
         )
         self.assertEqual(timeout, 5.0)
+
+    def test_explicit_finite_limits_are_encoded_and_invalid_negative_rejected(self):
+        path = "/api/0/buckets/aw-watcher-window_PC/events"
+        client, opener = self.client({path: []})
+
+        for limit in (0, 25):
+            with self.subTest(limit=limit):
+                self.assertEqual(client.get_events("aw-watcher-window_PC", START, END, limit), [])
+                request, _ = opener.requests[-1]
+                query = parse_qs(urlsplit(request.full_url).query)
+                self.assertEqual(query["limit"], [str(limit)])
+                self.assertEqual(query["start"], [START.isoformat()])
+                self.assertEqual(query["end"], [END.isoformat()])
+
+        with self.assertRaisesRegex(ActivityWatchError, "limit is invalid"):
+            client.get_events("aw-watcher-window_PC", START, END, -2)
+        self.assertEqual(len(opener.requests), 2)
 
     def test_duplicate_window_bucket_fails_before_reading_events(self):
         buckets = {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Set the compiled updater version and isolate Research Edition update trust."""
+"""Set the compiled version and isolate Tauri updater trust by edition."""
 
 import argparse
 import base64
@@ -53,8 +53,11 @@ def configure(
     require_signing_key: bool,
     *,
     platform: str = sys.platform,
+    disable_updater: bool = False,
 ) -> None:
     config = json.loads(path.read_text(encoding="utf-8"))
+    if disable_updater and (research or require_signing_key):
+        raise ValueError("Unsigned fork builds cannot use research or release signing options")
     tv = tauri_version(version)
     config["version"] = tv
     if platform == "win32" and msi_rejects(tv):
@@ -63,12 +66,19 @@ def configure(
             # Windows only ever produces msi+nsis from "all"; drop msi and
             # keep nsis, which accepts the full AW pre-release scheme.
             bundle["targets"] = ["nsis"]
-    if research:
+    if research or disable_updater:
         updater = config["plugins"]["updater"]
         if updater["endpoints"] != [STANDARD_ENDPOINT]:
             raise ValueError(
                 "Unexpected source updater endpoint; review before patching"
             )
+    if disable_updater:
+        # Fork CI produces unsigned test packages, not ActivityWatch releases.
+        # Never let those packages trust or download the upstream update feed.
+        updater["pubkey"] = ""
+        updater["endpoints"] = []
+        config.setdefault("bundle", {})["createUpdaterArtifacts"] = False
+    elif research:
         research_key = os.environ.get("TAURI_UPDATER_PUBLIC_KEY_RESEARCH", "").strip()
         signing_key = os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "").strip()
         if require_signing_key and (not research_key or not signing_key):
@@ -97,9 +107,20 @@ def main() -> None:
     parser.add_argument("--version", required=True)
     parser.add_argument("--research", action="store_true")
     parser.add_argument("--require-signing-key", action="store_true")
+    parser.add_argument(
+        "--disable-updater",
+        action="store_true",
+        help="disable update trust and artifacts in an unsigned fork test build",
+    )
     args = parser.parse_args()
     try:
-        configure(args.config, args.version, args.research, args.require_signing_key)
+        configure(
+            args.config,
+            args.version,
+            args.research,
+            args.require_signing_key,
+            disable_updater=args.disable_updater,
+        )
     except (ValueError, KeyError) as exc:
         parser.exit(1, f"ERROR: {exc}\n")
 

@@ -5,3 +5,4 @@ Makefile linguist-vendored
 *.sh linguist-vendored
 *.cmd linguist-vendored
 *.ps1 linguist-vendored
+scripts/patches/*.patch text eol=lf

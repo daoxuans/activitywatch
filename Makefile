@@ -216,17 +216,31 @@ dist/$(APP_BUNDLE).dmg: dist/$(APP_BUNDLE).app
 dist/notarize:
 	./scripts/notarize.sh
 
+# The pinned aw-tauri package target assumes an extensionless executable;
+# Windows builds must stage the native .exe instead.
 package:
 	rm -rf dist
 	mkdir -p dist/activitywatch
 	for dir in $(PACKAGEABLES); do \
-		make --directory=$$dir package; \
-		cp -r $$dir/dist/$$dir dist/activitywatch; \
+		if [ "$(TAURI_BUILD)" = "true" ] && [ "$$dir" = "aw-tauri" ] && [[ "$(OS)" == MINGW* || "$(OS)" == MSYS* ]]; then \
+			tauri_exe=aw-tauri/src-tauri/target/$(targetdir)/aw-tauri.exe; \
+			test -f "$$tauri_exe" || { echo "Missing Tauri Windows executable: $$tauri_exe" >&2; exit 2; }; \
+			cp "$$tauri_exe" dist/activitywatch/aw-tauri.exe || exit 2; \
+		else \
+			make --directory=$$dir package || exit 2; \
+			cp -r $$dir/dist/$$dir dist/activitywatch || exit 2; \
+		fi; \
 	done
 ifeq ($(TAURI_BUILD),true)
 # Copy aw-sync binary for Tauri builds
 	mkdir -p dist/activitywatch/aw-server-rust
+ifneq ($(filter MINGW% MSYS%,$(OS)),)
+	@sync_exe=aw-server-rust/target/$(targetdir)/aw-sync.exe; \
+		test -f "$$sync_exe" || { echo "Missing Tauri Windows aw-sync executable" >&2; exit 2; }; \
+		cp "$$sync_exe" dist/activitywatch/aw-server-rust/aw-sync.exe
+else
 	cp aw-server-rust/target/$(targetdir)/aw-sync dist/activitywatch/aw-server-rust/aw-sync
+endif
 else
 # Move aw-qt to the root of the dist folder
 # Rename first to avoid cp conflict: the aw-qt binary inside the dir has the
@@ -256,9 +270,17 @@ endif
 	# Windows CI runner. Stage it before package-all.sh creates the ZIP/setup.
 ifneq ($(strip $(AW_SHARE_BINARY)),)
 	@test -f "$(AW_SHARE_BINARY)" || { echo "Missing AW_SHARE_BINARY: $(AW_SHARE_BINARY)" >&2; exit 2; }
+ifeq ($(TAURI_BUILD),true)
+	# Keep the opt-in CLI outside the aw-* module discovery path.
+	mkdir -p dist/activitywatch/share-client
+	cp "$(AW_SHARE_BINARY)" dist/activitywatch/share-client/aw-share.exe
+	cp share-client/categories.example.json dist/activitywatch/share-client/categories.example.json
+	cp share-client/README.md dist/activitywatch/share-client/README.md
+else
 	cp "$(AW_SHARE_BINARY)" dist/activitywatch/aw-share.exe
 	cp share-client/categories.example.json dist/activitywatch/categories.example.json
 	cp share-client/README.md dist/activitywatch/README-share-client.md
+endif
 endif
 # Builds zips and setups
 	bash scripts/package/package-all.sh

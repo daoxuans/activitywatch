@@ -1,6 +1,6 @@
 # ActivityWatch 汇总分享客户端
 
-本目录位于 ActivityWatch 源码仓库的 `share-client/`，是基于本机 ActivityWatch 事件的独立客户端组件。它尚未接入 ActivityWatch 托盘界面，也不会随 ActivityWatch 自动启动；原型源码仍保留在独立项目 `activitywatch-summary-client`。用于 Windows 单文件构建的入口是 [launcher.py](launcher.py)，不需要在使用者电脑上安装 Rust。
+本目录位于 ActivityWatch 源码仓库的 `share-client/`，是基于本机 ActivityWatch 事件的独立客户端组件。最终桌面发行版以 Tauri 为架构；目前本组件仅随 Tauri 测试包分发，**尚未接入 Tauri 界面或自动调度**，也不会随 ActivityWatch 自动启动。原型源码仍保留在独立项目 `activitywatch-summary-client`。用于 Windows 单文件构建的入口是 [launcher.py](launcher.py)，使用者电脑不需要安装 Rust。
 
 一台 Windows 电脑上的可见、主动开启的 ActivityWatch 汇总分享程序。它读取本机前台窗口、离开状态和浏览器事件，按北京时间汇总软件、网站域名和类别的使用时长，再将**汇总**发往电脑使用者确认过的 HTTPS 地址。
 
@@ -8,9 +8,9 @@
 
 ## GitHub Windows 构建
 
-仓库的 [Windows summary client build](../.github/workflows/windows-summary-build.yml) 是**仅手动触发**的测试构建：在 GitHub Windows 构建机上运行本目录的测试，把本客户端打成 `aw-share.exe`，然后在构建机上安装 Rust、Python、Node 等工具编译 ActivityWatch Qt 包。ZIP 和未签名的安装版 EXE 会作为该次运行的 Artifacts 保存；本机不必安装 Rust。它不会推送版本标签、发布 Release，也不会配置上报地址或令牌。
+仓库的 [Windows Tauri summary client build](../.github/workflows/windows-tauri-summary-build.yml) 在相关文件推送到 `master` 时运行，也可手动触发。在 GitHub Windows 构建机上测试本组件、生成 `aw-share.exe`，由构建机安装 Rust、Python、Node 等工具编译 ActivityWatch Tauri 版。本测试包包含窗口和离开状态采集器，不包含可选的 `aw-watcher-input`、`aw-notify`；域名仍需另装浏览器扩展。ZIP 和未签名的安装版 EXE 作为该次运行的 Artifacts 保存 14 天；开发电脑和使用者电脑都不必安装 Rust。构建版本从仓库版本号与提交号生成，不需要把上游标签推到 fork。测试包关闭上游自动更新，不推送版本标签、不发布 Release，也不预置上报地址或令牌。旧的 [Classic/Qt 测试工作流](../.github/workflows/windows-summary-build.yml) 保留作回退，不是本项目的最终桌面架构。
 
-构建流程需要先提交到你有权限的 GitHub 仓库，且手动触发的工作流文件须存在于该仓库的默认分支；目前尚未为此项目完成云端构建验证。本分支已把原有 Release 工作流各作业限定为仅在官方仓库运行；在自己的仓库里应使用这里的手动 Windows 工作流，不要复用发布入口，也应在合并上游变更后复核这道限制。此阶段的测试安装版仍沿用 ActivityWatch 原版安装身份和目录，可能覆盖既有正式版；在隔离安装身份前，真实电脑验证请先用便携 ZIP。包内的 `aw-share.exe` 需要电脑使用者单独开启并明确授权，当前不会自动启动或接入托盘；首次部署还须在本人设备验证浏览器扩展、本机汇总与 HTTPS 接收端。
+构建流程需要先提交到有权限的 GitHub 仓库；手动触发时工作流文件须存在于该仓库的默认分支。目前**尚未完成云端 Tauri 构建验证**。构建会对锁定的 Tauri 子项目应用一处明确的 [Windows 便携目录模块发现补丁](../scripts/patches/aw-tauri-windows-portable.patch)；若上游源码变化导致补丁不再适用，CI 会失败而非静默沿用。原有 Release 工作流各作业已限定为仅在官方仓库运行，合并上游变更后仍需复核这一限制。Tauri 安装包与 Classic/Qt 使用不同的安装身份和目录，但可能与**已有的 Tauri 版**冲突；首次试用宜先用便携 ZIP。包内的 `share-client/aw-share.exe` 需要电脑使用者单独开启并明确授权，当前不会自动启动或接入托盘。CI 会在临时安装目录启动隔离的 Tauri 服务，检查本机 API 和窗口／离开状态采集器注册；它不测试图形界面、真实前台时长、浏览器扩展或 HTTPS 接收端，首次部署仍须在使用者本人设备验证。
 
 ## 汇总口径与隐私边界
 
@@ -34,14 +34,14 @@ python -m aw_share status
 python -m aw_share local-preview --day today
 ```
 
-如果 GitHub 构建流程生成了 `aw-share.exe`，在使用者自己的 Windows 电脑下载、解压构建产物后，可在该文件所在目录的 PowerShell 中运行：
+如果 GitHub Tauri 构建流程生成了测试包，在使用者自己的 Windows 电脑下载、解压 ZIP 后，进入解压出的 `activitywatch` 目录；安装版则进入实际安装目录。在该目录的 PowerShell 中运行：
 
 ```powershell
-.\aw-share.exe status
-.\aw-share.exe local-preview --day today
+.\share-client\aw-share.exe status
+.\share-client\aw-share.exe local-preview --day today
 ```
 
-下文的 `python -m aw_share` 命令均可换成 `.\aw-share.exe`，子命令、交互确认和环境变量要求不变；例如使用者手动授权开启后在可见终端运行 `.\aw-share.exe watch --interval 900 --catch-up-days 7`。单独的 `aw-share.exe` 不内置 ActivityWatch 本体或浏览器扩展（本 CI 的 Windows ZIP/安装包另外包含 ActivityWatch），也不内置接收地址、令牌或本机分类文件。构建产物与真实电脑、云端服务尚未联调；只有测试通过不代表已经能够在微信看到数据。
+下文的 `python -m aw_share` 命令均可换成 `.\share-client\aw-share.exe`（从 Tauri 安装或解压目录运行），子命令、交互确认和环境变量要求不变；例如使用者手动授权开启后，在可见终端运行 `.\share-client\aw-share.exe watch --interval 900 --catch-up-days 7`。该可见命令行程序不内置 ActivityWatch 本体或浏览器扩展（本 CI 的 Windows ZIP/安装包另外包含 ActivityWatch），也不内置接收地址、令牌或本机分类文件。构建产物与真实电脑、云端服务尚未联调；只有测试通过不代表已经能够在微信看到数据。
 
 `local-preview` 会单独要求电脑使用者输入“我同意本机预览”，只在此终端展示当天汇总；**不启用分享、不需要云端地址或令牌、不上传**。输出标记 `local_only=true`、`authorized=false`，不能作为上报报文。它适合先在那台电脑上检查 ActivityWatch 是否正常记录。
 
