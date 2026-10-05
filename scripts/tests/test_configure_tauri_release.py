@@ -262,6 +262,10 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
     script = textwrap.dedent(
         step.split("        run: |\n")[1].split("        env:\n")[0]
     )
+    # A nested Bash launched by Python on Windows can find the WindowsApps
+    # `python` alias even though the outer CI shell runs pytest from its venv.
+    # Pin only the interpreter; keep the release script's branching unchanged.
+    script = 'python() { "$AW_TEST_PYTHON" "$@"; }\n' + script
     work = config.parent / "build"
     shutil.copytree(ROOT / "scripts/package", work / "scripts/package")
     target = work / "aw-tauri/src-tauri/tauri.conf.json"
@@ -273,6 +277,7 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
         GITHUB_REF=ref,
         GITHUB_EVENT_NAME=event,
         VERSION_NO_V="0.14.0b5",
+        AW_TEST_PYTHON=sys.executable,
         TAURI_UPDATER_PUBLIC_KEY_RESEARCH="",
         TAURI_SIGNING_PRIVATE_KEY="",
     )
