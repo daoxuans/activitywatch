@@ -1381,7 +1381,9 @@ jobs:
               args+=(--require-signing-key)
             fi
           fi
-          python3 scripts/package/configure_tauri_release.py \
+          # setup-python exposes `python` on every matrix OS. On Windows,
+          # `python3` can resolve to the Microsoft Store execution alias.
+          python scripts/package/configure_tauri_release.py \
             --config aw-tauri/src-tauri/tauri.conf.json \
             --version "$VERSION_NO_V" "${args[@]}"
         env:

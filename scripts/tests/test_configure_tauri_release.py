@@ -279,10 +279,17 @@ def test_workflow_requires_keys_only_for_publishable_research_builds(
     result = subprocess.run(
         ["bash", "-e", "-c", script], cwd=work, env=env, text=True, capture_output=True
     )
-    assert (result.returncode == 0) == success, result.stderr
+    diagnostics = (
+        f"exit={result.returncode}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert (result.returncode == 0) == success, diagnostics
     if success and research == "true":
         assert json.loads(target.read_text())["plugins"]["updater"]["endpoints"] == []
     if not success:
+        assert (
+            "Research releases require their own public and signing keys"
+            in result.stderr
+        ), diagnostics
         assert target.read_bytes() == config.read_bytes()
 
 
